@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,4 +5,190 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMIN
+  USUARIO
+}
+
+enum TipoNegocio {
+  COMERCIO
+  SERVICIO
+}
+
+// ------------------------------------------------------------------
+// USUARIOS
+// ------------------------------------------------------------------
+
+model Usuario {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  username     String   @unique
+  fotoPerfil   String?
+  rol          Rol      @default(USUARIO)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  consultas        ConsultaPunto[]
+  favoritosNegocio FavoritoNegocio[]
+  notificaciones   Notificacion[]
+  negociosCreados  Negocio[]            @relation("NegociosCreadosPor")
+  auditorias       AuditLog[]           @relation("AccionesAdmin")
+  resetTokens      PasswordResetToken[]
+
+  @@map("usuarios")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  token     String   @unique
+  expiraEn  DateTime
+  usado     Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([usuarioId])
+  @@map("password_reset_tokens")
+}
+
+// ------------------------------------------------------------------
+// NEGOCIOS
+// ------------------------------------------------------------------
+
+model Categoria {
+  id     String      @id @default(cuid())
+  nombre String      @unique
+  tipo   TipoNegocio
+
+  negocios Negocio[]
+
+  @@map("categorias")
+}
+
+model Negocio {
+  id          String      @id @default(cuid())
+  nombre      String
+  categoriaId String
+  categoria   Categoria   @relation(fields: [categoriaId], references: [id])
+  descripcion String?
+  // PostGIS — Prisma 6 no modela geometría de forma nativa (ver nota en el chat).
+  // Esta columna queda invisible para Prisma Client: todo acceso va por $queryRaw/$executeRaw.
+  ubicacion   Unsupported("geometry(Point, 4326)")
+  direccion   String?
+  oculto      Boolean     @default(false)
+  creadoPorId String
+  creadoPor   Usuario     @relation("NegociosCreadosPor", fields: [creadoPorId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  fotos          NegocioFoto[]
+  favoritos      FavoritoNegocio[]
+  notificaciones Notificacion[]
+
+  @@index([categoriaId])
+  @@map("negocios")
+}
+
+model NegocioFoto {
+  id        String  @id @default(cuid())
+  negocioId String
+  negocio   Negocio @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  url       String
+  orden     Int     @default(0)
+
+  @@index([negocioId])
+  @@map("negocio_fotos")
+}
+
+model FavoritoNegocio {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  negocioId String
+  negocio   Negocio  @relation(fields: [negocioId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([usuarioId, negocioId])
+  @@map("favoritos_negocio")
+}
+
+// ------------------------------------------------------------------
+// CONSULTAS DE PUNTO (mapa / historial / comparar)
+// ------------------------------------------------------------------
+
+model ConsultaPunto {
+  id         String   @id @default(cuid())
+  usuarioId  String
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+  // PostGIS — mismo caso que Negocio.ubicacion: Unsupported, acceso solo por raw SQL.
+  ubicacion  Unsupported("geometry(Point, 4326)")
+  resultado  Json // snapshot: perfil demográfico + negocios cercanos + brechas calculadas
+  esFavorito Boolean  @default(false)
+  fecha      DateTime @default(now())
+
+  @@index([usuarioId, fecha])
+  @@map("consultas_punto")
+}
+
+// ------------------------------------------------------------------
+// DATOS GEOGRÁFICOS ESTÁTICOS (importados, sin CRUD de usuario)
+// ------------------------------------------------------------------
+
+model SectorCensal {
+  id             String  @id @default(cuid())
+  codigoInec     String? @unique
+  // PostGIS — Unsupported, igual que las anteriores.
+  geometria      Unsupported("geometry(Polygon, 4326)")
+  poblacionTotal Int?
+  edadPromedio   Float?
+  // Variables del INEC aún sin confirmar (ver [PENDIENTE] en el artículo IEEE).
+  // Evita tener que migrar otra vez cuando se definan.
+  atributosExtra Json?
+
+  @@map("sectores_censales")
+}
+
+model ZonaLimite {
+  id        String @id @default(cuid())
+  nombre    String @unique // ej. "El Cebollar + buffer"
+  geometria Unsupported("geometry(Polygon, 4326)")
+
+  @@map("zonas_limite")
+}
+
+// ------------------------------------------------------------------
+// ADMIN
+// ------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  admin     Usuario  @relation("AccionesAdmin", fields: [adminId], references: [id])
+  accion    String
+  entidad   String
+  entidadId String
+  detalle   Json?
+  fecha     DateTime @default(now())
+
+  @@index([fecha])
+  @@map("audit_log")
+}
+
+model Notificacion {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  negocioId String?
+  negocio   Negocio? @relation(fields: [negocioId], references: [id])
+  mensaje   String
+  tipo      String
+  leido     Boolean  @default(false)
+  fecha     DateTime @default(now())
+
+  @@index([usuarioId, leido])
+  @@map("notificaciones")
 }
