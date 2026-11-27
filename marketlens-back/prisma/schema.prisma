@@ -17,6 +17,11 @@ enum TipoNegocio {
   SERVICIO
 }
 
+enum FuenteDato {
+  LEVANTAMIENTO
+  OSM
+}
+
 // ------------------------------------------------------------------
 // USUARIOS
 // ------------------------------------------------------------------
@@ -80,6 +85,7 @@ model Negocio {
   ubicacion   Unsupported("geometry(Point, 4326)")
   direccion   String?
   oculto      Boolean     @default(false)
+  fuente      FuenteDato  @default(LEVANTAMIENTO)
   creadoPorId String
   creadoPor   Usuario     @relation("NegociosCreadosPor", fields: [creadoPorId], references: [id])
   createdAt   DateTime    @default(now())
@@ -109,7 +115,7 @@ model FavoritoNegocio {
   usuarioId String
   usuario   Usuario  @relation(fields: [usuarioId], references: [id])
   negocioId String
-  negocio   Negocio  @relation(fields: [negocioId], references: [id])
+  negocio   Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
   @@unique([usuarioId, negocioId])
@@ -183,7 +189,7 @@ model Notificacion {
   usuarioId String
   usuario   Usuario  @relation(fields: [usuarioId], references: [id])
   negocioId String?
-  negocio   Negocio? @relation(fields: [negocioId], references: [id])
+  negocio   Negocio? @relation(fields: [negocioId], references: [id], onDelete: SetNull)
   mensaje   String
   tipo      String
   leido     Boolean  @default(false)

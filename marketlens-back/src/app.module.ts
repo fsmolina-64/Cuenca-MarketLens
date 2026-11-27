@@ -7,6 +7,7 @@ import { AuthController } from './auth/auth.controller';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { NegocioModule } from './negocios/negocios.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
       isGlobal: true,
     }),
     AuthModule,
+    NegocioModule,
   ],
   controllers: [AppController, AuthController],
   providers: [
